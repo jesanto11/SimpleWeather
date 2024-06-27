@@ -46,4 +46,8 @@ class WeatherViewModel : ViewModel() {
             }
         }
     }
+
+    fun setErrorMessage(message: String) {
+        _errorMessage.value = message
+    }
 }
