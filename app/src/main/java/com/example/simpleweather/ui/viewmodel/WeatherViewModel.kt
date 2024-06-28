@@ -16,22 +16,29 @@ class WeatherViewModel : ViewModel() {
     private val _errorMessage = mutableStateOf<String?>(null)
     val errorMessage = _errorMessage
 
+    private val _loading = mutableStateOf(false)
+    val loading = _loading
+
     private val coordinatesResponse = mutableStateOf<GeocodingResponse?>(null)
 
     private val apiKey = "API_KEY"
 
     fun fetchWeather(latitude: Double, longitude: Double) {
+        _loading.value = true
         viewModelScope.launch {
             try {
                 val response = RetrofitInstance.weatherApi.getWeather(latitude, longitude, apiKey)
                 _weatherResponse.value = response
             } catch (e: Exception) {
                 _errorMessage.value = e.message
+            } finally {
+                _loading.value = false
             }
         }
     }
 
     fun fetchCoordinates(cityName: String) {
+        _loading.value = true
         viewModelScope.launch {
             try {
                 val response = RetrofitInstance.geocodingApi.getCoordinates(cityName, 1, apiKey)
@@ -43,6 +50,8 @@ class WeatherViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 _errorMessage.value = e.message
+            } finally {
+                _loading.value = false
             }
         }
     }

@@ -3,8 +3,11 @@ package com.example.simpleweather.data.utils
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationManager
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.core.app.ActivityCompat
@@ -46,8 +49,22 @@ fun checkAndRequestLocationPermissions(
     }
 }
 
+fun isLocationServicesEnabled(context: Context): Boolean {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+            locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+}
+
+fun promptEnableLocationServices(activity: Activity) {
+    activity.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+}
+
 suspend fun getCurrentLocation(activity: Activity): Result<Location> {
-    return if (ActivityCompat.checkSelfPermission(
+    if (!isLocationServicesEnabled(activity)) {
+        return Result.failure(Exception("Location services are disabled"))
+    }
+
+    if (ActivityCompat.checkSelfPermission(
             activity,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
@@ -56,26 +73,26 @@ suspend fun getCurrentLocation(activity: Activity): Result<Location> {
         ) != PackageManager.PERMISSION_GRANTED
     ) {
         return Result.failure(Exception("Location permission denied"))
-    } else {
-        val fusedLocationClient: FusedLocationProviderClient =
-            LocationServices.getFusedLocationProviderClient(activity)
-        try {
-            val location = fusedLocationClient.awaitLastLocation()
-            if (location != null) {
-                Log.d(TAG, "Last known location: $location")
-                Result.success(location)
-            } else {
-                Log.d(TAG, "Last known location is null, requesting location update")
-                val locationUpdate = fusedLocationClient.awaitLocationUpdate()
-                Result.success(locationUpdate)
-            }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException: Permission denied", e)
-            Result.failure(Exception("SecurityException: Permission denied"))
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception while getting location", e)
-            Result.failure(e)
+    }
+
+    val fusedLocationClient: FusedLocationProviderClient =
+        LocationServices.getFusedLocationProviderClient(activity)
+    return try {
+        val location = fusedLocationClient.awaitLastLocation()
+        if (location != null) {
+            Log.d(TAG, "Last known location: $location")
+            Result.success(location)
+        } else {
+            Log.d(TAG, "Last known location is null, requesting location update")
+            val locationUpdate = fusedLocationClient.awaitLocationUpdate()
+            Result.success(locationUpdate)
         }
+    } catch (e: SecurityException) {
+        Log.e(TAG, "SecurityException: Permission denied", e)
+        Result.failure(Exception("SecurityException: Permission denied"))
+    } catch (e: Exception) {
+        Log.e(TAG, "Exception while getting location", e)
+        Result.failure(e)
     }
 }
 
@@ -121,8 +138,10 @@ suspend fun FusedLocationProviderClient.awaitLocationUpdate(): Location {
         }
 
         try {
+            Log.d(TAG, "Request location updates")
             requestLocationUpdates(locationRequest, locationCallback, null)
         } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException while requesting location updates", e)
             continuation.resumeWithException(Exception("SecurityException: Permission denied"))
         }
     }

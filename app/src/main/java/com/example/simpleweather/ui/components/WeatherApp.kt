@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.simpleweather.data.utils.checkAndRequestLocationPermissions
 import com.example.simpleweather.data.utils.getCurrentLocation
+import com.example.simpleweather.data.utils.isLocationServicesEnabled
+import com.example.simpleweather.data.utils.promptEnableLocationServices
 import com.example.simpleweather.ui.viewmodel.WeatherViewModel
 import kotlinx.coroutines.launch
 
@@ -28,6 +30,7 @@ fun WeatherApp(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var city by remember { mutableStateOf("") }
+    val isLoading by viewModel.loading
 
     Column (
         modifier = Modifier
@@ -44,20 +47,27 @@ fun WeatherApp(
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = {
             if (context is Activity) {
-                if (checkAndRequestLocationPermissions(context, requestPermissionLauncher)) {
+                if (!isLocationServicesEnabled(context)) {
+                    promptEnableLocationServices(context)
+                } else if (checkAndRequestLocationPermissions(context, requestPermissionLauncher)) {
                     scope.launch {
+                        viewModel.loading.value = true
                         val locationResult = getCurrentLocation(context)
                         locationResult.fold(
                             onSuccess = { location ->
                                 Log.d("WeatherApp", "Location obtained: $location")
                                 viewModel.fetchWeather(location.latitude, location.longitude)
+                                viewModel.loading.value = false
                             },
                             onFailure = { error ->
                                 Log.e("WeatherApp", "Error fetching location", error)
                                 viewModel.setErrorMessage(error.message ?: "Error fetching location")
+                                viewModel.loading.value = false
                             }
                         )
                     }
+                } else {
+                    viewModel.setErrorMessage("Location permission not granted")
                 }
             }
         }) {
@@ -69,14 +79,18 @@ fun WeatherApp(
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        viewModel.weatherResponse.value?.let { weather ->
-            Text(text = "Temperature: ${weather.main.temp} °C")
-            Text(text = "Humidity: ${weather.main.humidity} %")
-            Text(text = "Description: ${weather.weather[0].description}")
-        }
+        if (isLoading) {
+            CircularProgressIndicator()
+        } else {
+            viewModel.weatherResponse.value?.let { weather ->
+                Text(text = "Temperature: ${weather.main.temp} °C")
+                Text(text = "Humidity: ${weather.main.humidity} %")
+                Text(text = "Description: ${weather.weather[0].description}")
+            }
 
-        viewModel.errorMessage.value?.let { error ->
-            Text(text = "Error: $error", color = Color.Red)
+            viewModel.errorMessage.value?.let { error ->
+                Text(text = "Error: $error", color = Color.Red)
+            }
         }
     }
 }
